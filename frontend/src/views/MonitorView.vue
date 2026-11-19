@@ -7,11 +7,14 @@ import type { InferenceResult } from '@/types/inference'
 import TimingBars from '@/components/TimingBars.vue'
 import FeatureMeters from '@/components/FeatureMeters.vue'
 
+const fileInput = ref<HTMLInputElement | null>(null)
 const fileList = ref<File[]>([])
 const station = ref('工位-A')
 const loading = ref(false)
+const sampleLoading = ref('')
 const result = ref<InferenceResult | null>(null)
 const previewUrl = ref('')
+const dragOver = ref(false)
 
 const routeLabel: Record<string, string> = {
   normal: '正常光照',
@@ -27,12 +30,50 @@ const branchLabel: Record<string, string> = {
 
 const hasResult = computed(() => !!result.value)
 
-function onFileChange(uploadFile: { raw?: File }) {
-  const raw = uploadFile.raw
-  if (!raw) return
-  fileList.value = [raw]
+function setSelectedFile(file: File) {
+  if (!file.type.startsWith('image/')) {
+    ElMessage.warning('请选择图片文件')
+    return
+  }
+  fileList.value = [file]
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-  previewUrl.value = URL.createObjectURL(raw)
+  previewUrl.value = URL.createObjectURL(file)
+  result.value = null
+}
+
+function openFilePicker() {
+  fileInput.value?.click()
+}
+
+function onNativeFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) setSelectedFile(file)
+  input.value = ''
+}
+
+function onDrop(event: DragEvent) {
+  event.preventDefault()
+  dragOver.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (file) setSelectedFile(file)
+}
+
+async function loadSample(kind: 'low' | 'high') {
+  sampleLoading.value = kind
+  try {
+    const name = kind === 'low' ? 'sample_low.jpg' : 'sample_high.jpg'
+    const res = await fetch(`/samples/${name}`)
+    if (!res.ok) throw new Error(`sample ${name} missing`)
+    const blob = await res.blob()
+    setSelectedFile(new File([blob], name, { type: blob.type || 'image/jpeg' }))
+    ElMessage.success(kind === 'low' ? '已载入低照度样例' : '已载入强反光样例')
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('样例图片加载失败')
+  } finally {
+    sampleLoading.value = ''
+  }
 }
 
 async function startInfer() {
@@ -104,16 +145,44 @@ function reset() {
             <el-option label="工位-B" value="工位-B" />
             <el-option label="工位-C" value="工位-C" />
           </el-select>
-          <el-upload
-            :auto-upload="false"
-            :show-file-list="false"
+          <input
+            ref="fileInput"
+            class="sr-only"
+            type="file"
             accept="image/*"
-            :on-change="onFileChange"
-          >
-            <el-button>选择图片</el-button>
-          </el-upload>
+            @change="onNativeFileChange"
+          />
+          <el-button @click="openFilePicker">选择图片</el-button>
           <el-button type="primary" :loading="loading" @click="startInfer">开始计数</el-button>
           <el-button text @click="reset">清空</el-button>
+        </div>
+        <div class="sample-row">
+          <span class="sample-label">快速样例</span>
+          <el-button
+            size="small"
+            :loading="sampleLoading === 'low'"
+            @click="loadSample('low')"
+          >
+            低照度
+          </el-button>
+          <el-button
+            size="small"
+            :loading="sampleLoading === 'high'"
+            @click="loadSample('high')"
+          >
+            强反光
+          </el-button>
+        </div>
+        <div
+          class="dropzone"
+          :class="{ active: dragOver }"
+          @dragenter.prevent="dragOver = true"
+          @dragover.prevent="dragOver = true"
+          @dragleave.prevent="dragOver = false"
+          @drop="onDrop"
+          @click="openFilePicker"
+        >
+          拖拽图片到此处，或点击选择文件
         </div>
         <p v-if="fileList.length" class="file-name mono">{{ fileList[0].name }}</p>
       </div>
@@ -223,6 +292,49 @@ h1 {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.sample-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.sample-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.dropzone {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px dashed rgba(15, 61, 62, 0.28);
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.dropzone:hover,
+.dropzone.active {
+  border-color: var(--accent);
+  background: rgba(204, 251, 241, 0.45);
+  transform: translateY(-1px);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .file-name {
