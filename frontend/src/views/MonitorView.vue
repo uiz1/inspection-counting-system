@@ -66,7 +66,8 @@ async function loadSample(kind: 'low' | 'high') {
     const res = await fetch(`/samples/${name}`)
     if (!res.ok) throw new Error(`sample ${name} missing`)
     const blob = await res.blob()
-    setSelectedFile(new File([blob], name, { type: blob.type || 'image/jpeg' }))
+    const type = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/jpeg'
+    setSelectedFile(new File([blob], name, { type }))
     ElMessage.success(kind === 'low' ? '已载入低照度样例' : '已载入强反光样例')
   } catch (err) {
     console.error(err)
@@ -74,6 +75,11 @@ async function loadSample(kind: 'low' | 'high') {
   } finally {
     sampleLoading.value = ''
   }
+}
+
+async function runSample(kind: 'low' | 'high') {
+  await loadSample(kind)
+  if (fileList.value.length) await startInfer()
 }
 
 async function startInfer() {
@@ -158,31 +164,44 @@ function reset() {
         </div>
         <div class="sample-row">
           <span class="sample-label">快速样例</span>
-          <el-button
-            size="small"
-            :loading="sampleLoading === 'low'"
-            @click="loadSample('low')"
+          <button
+            type="button"
+            class="sample-btn"
+            data-testid="sample-low"
+            :disabled="sampleLoading === 'low'"
+            @click.stop.prevent="loadSample('low')"
           >
-            低照度
-          </el-button>
-          <el-button
-            size="small"
-            :loading="sampleLoading === 'high'"
-            @click="loadSample('high')"
+            {{ sampleLoading === 'low' ? '载入中…' : '低照度' }}
+          </button>
+          <button
+            type="button"
+            class="sample-btn"
+            data-testid="sample-high"
+            :disabled="sampleLoading === 'high'"
+            @click.stop.prevent="loadSample('high')"
           >
-            强反光
-          </el-button>
+            {{ sampleLoading === 'high' ? '载入中…' : '强反光' }}
+          </button>
+          <button
+            type="button"
+            class="sample-btn primary"
+            data-testid="sample-low-run"
+            :disabled="!!sampleLoading || loading"
+            @click.stop.prevent="runSample('low')"
+          >
+            一键演示（低照度）
+          </button>
         </div>
         <div
           class="dropzone"
+          data-testid="dropzone"
           :class="{ active: dragOver }"
           @dragenter.prevent="dragOver = true"
           @dragover.prevent="dragOver = true"
           @dragleave.prevent="dragOver = false"
           @drop="onDrop"
-          @click="openFilePicker"
         >
-          拖拽图片到此处，或点击选择文件
+          拖拽图片到此处，或使用上方「选择图片」
         </div>
         <p v-if="fileList.length" class="file-name mono">{{ fileList[0].name }}</p>
       </div>
@@ -305,6 +324,35 @@ h1 {
 .sample-label {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.sample-btn {
+  appearance: none;
+  border: 1px solid rgba(15, 61, 62, 0.18);
+  background: #fff;
+  color: var(--brand);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.sample-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-mist);
+  transform: translateY(-1px);
+}
+
+.sample-btn.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #f0fdfa;
+}
+
+.sample-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .dropzone {
