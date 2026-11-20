@@ -1,0 +1,14 @@
+---
+description: 光巡计数项目契约 — 每次改代码前必须遵守 AGENTS.md
+alwaysApply: true
+---
+
+# 项目契约绑定
+
+在本仓库进行任何开发、重构、联调前：
+
+1. **先读仓库根目录 `AGENTS.md`**（契约真源，当前版本见文件内「契约版本」）。
+2. HTTP 必须使用统一信封 `{code,message,data}`，API 前缀 `/api/v1`，WS 前缀 `/ws/v1`。
+3. 字段名与枚举与 `AGENTS.md` 逐字一致（JSON / TS 均 `snake_case`）。
+4. **接口或数据对象变更：先改 `AGENTS.md` 并升版，再改代码。**
+5. 若实现与 `AGENTS.md` 冲突，以 `AGENTS.md` 为准。
