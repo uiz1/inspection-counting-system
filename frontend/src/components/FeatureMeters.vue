@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { LightingFeatures } from '@/types/inference'
+import type { LightingFeatures } from '@/types'
 
 const props = defineProps<{ features: LightingFeatures }>()
 

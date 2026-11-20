@@ -1,4 +1,4 @@
-import type { InferenceResult, RouteClass, BranchName } from '@/types/inference'
+import type { CountingResult, RouteClass, BranchName } from '@/types'
 
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -89,6 +89,10 @@ function decideRoute(f: ReturnType<typeof extractFeatures>): { route_class: Rout
   if (f.l_mean <= 0.32 || f.r_dark >= 0.28) {
     return { route_class: 'low', branch: 'zero_dce_pp', reason: '低照度特征触发 → Zero-DCE++' }
   }
+  // 契约：mixed 为一等公民，禁止并入 normal
+  if (f.l_std >= 0.22) {
+    return { route_class: 'mixed', branch: 'identity', reason: '高对比混合光照 → mixed（默认直通，分块消融另开）' }
+  }
   return { route_class: 'normal', branch: 'identity', reason: '正常光照 → 直通' }
 }
 
@@ -178,7 +182,7 @@ function densityOverlay(canvas: HTMLCanvasElement): { overlay: HTMLCanvasElement
   return { overlay: out, count }
 }
 
-export async function runLocalInference(file: File, station: string): Promise<InferenceResult> {
+export async function runLocalInference(file: File, station_id: string): Promise<CountingResult> {
   const t0 = performance.now()
   const img = await loadImage(file)
   const original = canvasFromImage(img)
@@ -202,7 +206,8 @@ export async function runLocalInference(file: File, station: string): Promise<In
 
   return {
     id: crypto.randomUUID(),
-    station,
+    task_id: null,
+    station_id,
     created_at: new Date().toISOString(),
     route_class: decision.route_class,
     branch: decision.branch,

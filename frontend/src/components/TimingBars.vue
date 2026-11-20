@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TimingBreakdown } from '@/types/inference'
+import type { TimingBreakdown } from '@/types'
 
 const props = defineProps<{ timing: TimingBreakdown }>()
 
