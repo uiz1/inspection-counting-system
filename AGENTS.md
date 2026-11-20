@@ -3,7 +3,7 @@
 > **地位**：本文件是前后端 / 算法 / 机器人联调的**唯一长期契约**。  
 > **优先级**：高于口头约定、高于临时实现、高于 README 中的示例代码。  
 > **变更规则**：任何接口字段、枚举值、目录约定、响应结构的变更，**必须先改本文件并升版，再改代码**。  
-> **当前契约版本**：`v1.0.0`（2026-11-20，Asia/Shanghai）
+> **当前契约版本**：`v1.1.0`（2026-11-20，Asia/Shanghai）
 
 ---
 
@@ -95,7 +95,7 @@
 |---|---|
 | 前端 Vite | `5178` |
 | 后端 FastAPI | `18765` |
-| Vite 代理 | `/api` → `http://127.0.0.1:18765`；`/ws` → 同主机 WebSocket |
+| Vite 代理 | `/api` → `http://127.0.0.1:18765`（含 `/api/v1/*`）；`/ws` → 同主机（含 `/ws/v1`） |
 
 ---
 
@@ -103,9 +103,10 @@
 
 ### 4.1 Base URL
 
-- HTTP API 前缀：`/api/v1`
-- WebSocket：`/ws/v1`
+- HTTP API 前缀：**`/api/v1`**（强制版本化；禁止新代码再写无版本 `/api/*` 业务路径）
+- WebSocket 端点：**`/ws/v1`**（**单一端点**承载全部事件；禁止再拆 `/ws/v1/robot` 等子路径）
 - OpenAPI 文档：`/docs`（仅开发环境默认开启）
+- 书面规格同步：凡提到 REST 的文档 / 笔记 / `docs/api-spec.md`，路径一律写 `/api/v1/...`，与本契约一致
 
 ### 4.2 统一响应信封（HTTP JSON）
 
@@ -210,7 +211,14 @@
 | GET | `/path/traveled` | 已走过轨迹（可分页/时间窗） | `Path` |
 | GET | `/robot/pose` | 最新位姿快照 | `RobotPose` |
 
-### 5.5 兼容说明（迁移期）
+### 5.5 系统配置
+
+| 方法 | 路径 | 说明 | data |
+|---|---|---|---|
+| GET | `/config` | 读取系统配置 | `SystemConfig` |
+| PUT | `/config` | 全量替换系统配置 | `SystemConfig` |
+
+### 5.6 兼容说明（迁移期）
 
 旧实现若仍暴露 `/api/health`、`/api/infer` 等无版本前缀路径，迁移完成前可双挂；**新代码只允许调用 `/api/v1/*`**。迁移完成后删除旧路径。
 
@@ -218,8 +226,12 @@
 
 ## 6. WebSocket 事件清单（v1）
 
-- 连接：`ws://<host>:18765/ws/v1/robot`（经 Vite 代理则为 `ws://<vite>/ws/v1/robot`）
-- 消息格式：**每条均为 JSON 对象**，必须含 `event` 与 `data`：
+### 6.0 端点（冻结）
+
+- **唯一连接地址**：`ws://<host>:18765/ws/v1`
+- 经 Vite 代理：`ws://<vite-host>:5178/ws/v1` → 后端同路径
+- **禁止**再增加 `/ws/v1/robot`、`/ws/v1/map` 等第二端点；扩展靠 `event` 字段，不靠拆 URL
+- 消息格式：**每条均为 JSON 对象**，必须含 `event`、`ts`、`data`：
 
 ```json
 {
@@ -241,14 +253,16 @@
 | `capture.ready` | `{ station_id, frame_id, image_url? }` | 定点采图完成可推理 | 事件 |
 | `counting.finished` | `CountingResult` | 计数完成推送 | 事件 |
 | `alert` | `Alert` | 告警 | 事件 |
+| `pong` | `{}` | 心跳应答 | 响应 `ping` |
+| `config.updated` | `SystemConfig` | 系统配置变更广播 | 事件 |
 
 ### 6.2 客户端 → 服务端
 
 | event | data | 说明 |
 |---|---|---|
-| `subscribe` | `{ topics: string[] }` | 订阅主题（可选；默认全订） |
-| `map.viewport` | `{ follow: boolean }` | 仅前端本地也可；若上报则用于服务端裁剪推送 |
-| `ping` | `{}` | 心跳；服务端回 `pong` |
+| `subscribe` | `{ topics: string[] }` | 订阅主题（可选；默认全订）。`topics` 取值如 `robot.*`、`path.*`、`counting.*`、`alert` |
+| `map.viewport` | `{ follow: boolean }` | 可选上报；用于服务端裁剪推送 |
+| `ping` | `{}` | 心跳；服务端回 `event=pong` |
 
 ### 6.3 连接约束
 
@@ -286,12 +300,19 @@
 }
 ```
 
-### 7.3 光照类别与分支
+### 7.3 光照类别与分支（**强制 4 类，含 mixed**）
 
 ```ts
 type RouteClass = "normal" | "low" | "high" | "mixed"
 type BranchName = "identity" | "zero_dce_pp" | "specular_clahe"
 ```
+
+**硬性规定（创新点，盯紧）**：
+
+1. `RouteClass` **必须保留 4 值**；`mixed` 是一等公民，**禁止**再并入 `normal`。
+2. 路由器在「高对比 / 暗角+局部高光并存」时必须输出 `route_class: "mixed"`，不得为省事改成 `normal`。
+3. 前端展示、台账、评测、消融实验均需能筛选/对比 `mixed`。
+4. 现状代码若仍 3 类，属于迁移债（§14），清理时优先修复，不得继续扩散。
 
 **路由映射（冻结）**：
 
@@ -300,9 +321,9 @@ type BranchName = "identity" | "zero_dce_pp" | "specular_clahe"
 | `normal` | `identity` | 直通 |
 | `low` | `zero_dce_pp` | 暗光增强（Zero-DCE++） |
 | `high` | `specular_clahe` | 高光抑制 + CLAHE |
-| `mixed` | 默认 `identity`；允许配置为分块路由结果的主分支标签 | 高对比混合；主路径先标类，预处理默认直通，分块融合为消融实验 |
+| `mixed` | 默认 `identity`；消融可切「分块路由后融合」 | 混合光照标签保留；主路径默认直通，分块融合作消融实验 |
 
-> 阈值标定依据：验证集上 `α·MAE + β·Latency` 网格搜索；阈值常量集中在 `algorithms/lighting/router.py`（或配置文件），不得散落魔法数到前端。
+> 阈值标定依据：验证集上 `α·MAE + β·Latency` 网格搜索；阈值常量集中在后端配置 / `algorithms/lighting/router.py`，前端只读展示与（经 API 的）可调配置，不得各写一套阈值。
 
 ### 7.4 `TimingBreakdown`
 
@@ -453,6 +474,31 @@ type Path = {
 }
 ```
 
+### 7.14 `SystemConfig`（`/system` 设置读写）
+
+```ts
+{
+  route_thresholds: {
+    low_l_mean: number
+    low_r_dark: number
+    high_r_sat: number
+    high_a_glare: number
+    mixed_l_std: number
+  }
+  camera: {
+    jpeg_quality: number       // 1–100
+    capture_dwell_sec: number  // 工位停留
+    prefer_width: number       // 采图像素宽，可与计数输入解耦
+    prefer_height: number
+  }
+  counting_input: {
+    width: 640                 // 宽 W
+    height: 360                // 高 H
+    layout: "NCHW"             // ONNX 张量为 1×3×360×640，禁止写成 1×3×640×360
+  }
+}
+```
+
 ---
 
 ## 8. 算法硬约束
@@ -483,28 +529,42 @@ type Path = {
 
 - 结构：MobileCount 或同等轻量编解码
 - **参数量 ≤ 1M**
-- **固定输入尺寸**（全局只允许一种，选定后写入此处）：推荐 `640×360`（宽×高）；变更须升契约版本
+- **固定输入尺寸**（全局只允许一种；变更须升契约版本）：
+  - 图像几何（宽×高，W×H）：**`640 × 360`**
+  - 张量布局：**NCHW** = **`[N, 3, 360, 640]`**（即 `1×3×H×W` = `1×3×360×640`）
+  - **禁止**把宽高写反成 `1×3×640×360`；预处理 resize、导出 ONNX、Runtime 推理、密度图还原必须同一约定
+  - 文档中凡写「640×360」均指 **宽×高**；凡写 ONNX shape 必须显式带 NCHW
 - 损失：密度图 MSE + 可选计数一致性项
 - 导出：**ONNX，opset ≥ 11**
 - 边缘推理：ONNX Runtime；树莓派可启用 INT8（可选）
 
 ### 8.4 评测协议（实现与论文口径一致）
 
-对比：无增强 / 固定 CLAHE / 固定 Zero-DCE++ / 动态路由  
-指标：MAE、RMSE、路由准确率、平均时延、P95 时延、参数量、FPS
+对比：无增强 / 固定 CLAHE / 固定 Zero-DCE++ / 动态路由（**含 mixed 子集消融**）  
+指标：MAE、RMSE、路由准确率（**4 类**）、平均时延、P95 时延、参数量、FPS
 
 ---
 
 ## 9. 前端 UI / 交互约束
 
-### 9.1 页面
+### 9.1 页面（4 页，精简冻结）
 
 | 路由 | 名称 | 职责 |
 |---|---|---|
-| `/map` 或 `/` | 态势地图 | 实时定位、路径、拖拽视角（推荐默认首页） |
+| `/` 与 `/map` | 态势地图 | 实时定位、巡航路径、拖拽视角（**默认首页**） |
 | `/monitor` | 实时计数 | 上传/样例、校正对比、密度、耗时、特征 |
 | `/ledger` | 巡检台账 | 记录列表与导出 |
-| `/system` | 系统概览 | 模块状态与启动说明 |
+| `/system` | 系统概览与设置 | 模块状态 + **系统设置**（见下） |
+
+**不设第 5 个独立「系统设置」路由。** 原「系统设置」需求并入 `/system`，页面内分两块：
+
+1. **概览**：模块状态、版本、机器人在线、启动说明  
+2. **设置**（可折叠面板或 Tab）：
+   - 光照路由阈值（`RouteThresholds`：如 `low_l_mean`、`low_r_dark`、`high_r_sat`、`high_a_glare`、`mixed_l_std`）
+   - 相机/采图参数（分辨率偏好、JPEG 质量、工位停留秒数等）
+   - 读写经 HTTP：`GET/PUT /api/v1/config`（对象 `SystemConfig`）；变更后可 WS 广播 `config.updated`
+
+> 毕设阶段设置项以「可演示、可复位默认」为够用标准；不必做成完整运维后台。
 
 ### 9.2 态势地图
 
@@ -558,7 +618,7 @@ type Path = {
 
 - DB 文件：`data/app.db`（gitignore 可忽略本地 db；提供迁移或 `create_all` 启动初始化）
 - 表名：复数 `snake_case`（`tasks`、`records`、`stations`）
-- 主键：UUID 字符串
+- 主键：**UUID 字符串**（规范做法，便于分布式/答辩口径；不改为自增 int，除非契约升 MAJOR）
 - 迁移策略：初期可用 SQLAlchemy `create_all`；引入 Alembic 后迁移文件入库
 
 ---
@@ -593,22 +653,23 @@ type Path = {
 
 ---
 
-## 14. 现状差异清单（迁移债，确认契约后清理）
+## 14. 现状差异清单（迁移债，确认后按序清理）
 
-> 以下为写本文件时仓库现状与契约的差异，**不作为可继续扩散的借口**。
+> 不作为可继续扩散的借口。**`mixed` 四分类恢复为 P0。**
 
-| 现状 | 契约要求 |
-|---|---|
-| 响应多为裸 Pydantic 模型 | 统一 `{code,message,data}` |
-| 路径 `/api/*` 无版本 | `/api/v1/*` |
-| 光照 3 类（mixed 并入 normal） | 4 类含 `mixed` |
-| 未用 Pinia / ECharts | 前端栈含 Pinia + ECharts |
-| 台账 JSON 文件 | SQLAlchemy + SQLite |
-| 无 `robot/` 目录 | 需建立 `robot/` 骨架 |
-| 无 WebSocket | `/ws/v1/robot` 事件流 |
-| 无态势地图页 | `/` 或 `/map` 态势页 |
+| 现状 | 契约要求 | 优先级 |
+|---|---|---|
+| 响应多为裸 Pydantic 模型 | `{code,message,data}` | P0 |
+| 路径 `/api/*` 无版本 | `/api/v1/*` | P0 |
+| 光照 3 类（mixed 并入 normal） | **4 类，必须产出 `mixed`** | **P0** |
+| 无 WebSocket / 或构思为 `/ws/v1/robot` | **单一端点 `/ws/v1`** | P0 |
+| 未用 Pinia / ECharts | 引入 Pinia + ECharts | P1 |
+| 台账 JSON 文件 | SQLAlchemy + SQLite（UUID PK） | P1 |
+| 无 `robot/` 目录 | 建立骨架 | P2 |
+| 无态势地图页 / 设置页 | `/` 地图 + `/system` 含设置 | P1 |
+| 文档仍写 `/api/infer` 等 | 统一 `/api/v1/...` | P0 |
 
-清理顺序建议：契约确认 → 响应信封 + `/api/v1` → 类型同步 → WS + 地图 → DB。
+清理顺序：契约确认 → **恢复 4 类 mixed** → 响应信封 + `/api/v1` + `/config` → 类型同步 → `/ws/v1` + 地图 → DB → `robot/`。
 
 ---
 
@@ -616,6 +677,7 @@ type Path = {
 
 | 版本 | 日期 (Asia/Shanghai) | 说明 |
 |---|---|---|
+| v1.1.0 | 2026-11-20 | 自审修订：WS 统一 `/ws/v1`；钉死 4 类 `mixed`；NCHW=`1×3×360×640`；`/system` 含设置 + `SystemConfig`；UUID 保留 |
 | v1.0.0 | 2026-11-20 | 首版整体约束：信封、REST/WS、对象、算法与变更流程 |
 
 ---

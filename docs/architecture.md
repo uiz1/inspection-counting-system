@@ -24,4 +24,4 @@
 
 1. `algorithms/lighting/preprocess.py` → 正式 Zero-DCE++ 权重
 2. `algorithms/counting/density.py` → MobileCount ONNX Runtime
-3. 新增 `ros2_ws/` 采图节点，推送到 `/api/infer`
+3. 新增 `robot/`（ROS2）采图节点，推送到 `/api/v1/infer`；位姿/路径走 `/ws/v1`
