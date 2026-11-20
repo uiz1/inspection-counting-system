@@ -8,7 +8,7 @@ import { useRobotStore } from '@/stores/robot'
 const route = useRoute()
 const session = useSessionStore()
 const robot = useRobotStore()
-const { api_online, health } = storeToRefs(session)
+const { status_label, demo_mode } = storeToRefs(session)
 
 const nav = [
   { to: '/map', label: '态势地图' },
@@ -56,12 +56,9 @@ onMounted(async () => {
           </RouterLink>
         </nav>
 
-        <div class="status mono" :class="{ online: api_online }">
+        <div class="status mono" :class="{ demo: demo_mode, live: !demo_mode }">
           <span class="pulse" />
-          <template v-if="api_online && health">
-            API · {{ health.mode }}
-          </template>
-          <template v-else>API 离线</template>
+          {{ status_label }}
         </div>
       </div>
     </header>
@@ -181,14 +178,20 @@ onMounted(async () => {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(20, 33, 43, 0.06);
-  color: var(--muted);
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--accent);
   font-size: 0.78rem;
+  font-weight: 600;
 }
 
-.status.online {
-  background: rgba(4, 120, 87, 0.1);
-  color: var(--ok);
+.status.live {
+  background: rgba(15, 61, 62, 0.1);
+  color: var(--brand);
+}
+
+.status.demo {
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--accent);
 }
 
 .pulse {

@@ -1,52 +1,81 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import type { Path, RobotPose, RobotStatus, WsEnvelope } from '@/types'
+import { computed, ref } from 'vue'
+import type { Path, RobotPose, RobotStatus, Station, WsEnvelope } from '@/types'
+import {
+  MOCK_PLANNED_PATH,
+  MOCK_POSE,
+  MOCK_STATIONS,
+  MOCK_STATUS,
+  MOCK_TRAVELED_PATH,
+} from '@/mock/scenario'
 import { robotSocket } from '@/ws/socket'
 
 export const useRobotStore = defineStore('robot', () => {
-  const pose = ref<RobotPose | null>(null)
-  const status = ref<RobotStatus | null>(null)
-  const planned_path = ref<Path | null>(null)
-  const traveled_path = ref<Path | null>(null)
+  const live_pose = ref<RobotPose | null>(null)
+  const live_status = ref<RobotStatus | null>(null)
+  const live_planned = ref<Path | null>(null)
+  const live_traveled = ref<Path | null>(null)
+  const live_stations = ref<Station[] | null>(null)
   const follow = ref(true)
+  const using_demo = ref(true)
+
+  const pose = computed(() => live_pose.value ?? MOCK_POSE)
+  const status = computed(() => live_status.value ?? MOCK_STATUS)
+  const planned_path = computed(() => live_planned.value ?? MOCK_PLANNED_PATH)
+  const traveled_path = computed(() => live_traveled.value ?? MOCK_TRAVELED_PATH)
+  const stations = computed(() => live_stations.value ?? MOCK_STATIONS)
+
+  function refreshDemoFlag() {
+    using_demo.value = !(
+      live_pose.value ||
+      live_status.value ||
+      live_planned.value ||
+      live_traveled.value
+    )
+  }
 
   function bindSocket() {
     robotSocket.onMessage((msg: WsEnvelope) => {
       switch (msg.event) {
         case 'robot.pose':
-          pose.value = msg.data as RobotPose
+          live_pose.value = msg.data as RobotPose
           break
-        case 'robot.status':
-          status.value = msg.data as RobotStatus
+        case 'robot.status': {
+          const st = msg.data as RobotStatus
+          // 骨架消息 online=false 时仍用演示态，避免空界面
+          if (st.online) live_status.value = st
           break
+        }
         case 'path.planned':
-          planned_path.value = msg.data as Path
+          live_planned.value = msg.data as Path
           break
         case 'path.traveled': {
           const data = msg.data as Path | { x: number; y: number; stamp?: string }[]
           if (Array.isArray(data)) {
-            if (!traveled_path.value) {
-              traveled_path.value = {
+            if (!live_traveled.value) {
+              live_traveled.value = {
                 id: 'traveled-live',
                 kind: 'traveled',
                 points: data,
                 task_id: null,
               }
             } else {
-              traveled_path.value = {
-                ...traveled_path.value,
-                points: [...traveled_path.value.points, ...data],
+              live_traveled.value = {
+                ...live_traveled.value,
+                points: [...live_traveled.value.points, ...data],
               }
             }
           } else {
-            traveled_path.value = data
+            live_traveled.value = data
           }
           break
         }
         default:
           break
       }
+      refreshDemoFlag()
     })
+    refreshDemoFlag()
   }
 
   function setFollow(value: boolean) {
@@ -59,7 +88,9 @@ export const useRobotStore = defineStore('robot', () => {
     status,
     planned_path,
     traveled_path,
+    stations,
     follow,
+    using_demo,
     bindSocket,
     setFollow,
   }

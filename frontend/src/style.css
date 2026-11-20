@@ -15,9 +15,9 @@ body {
   font-family: var(--font-sans);
   color: var(--ink);
   background:
-    radial-gradient(1200px 600px at 8% -10%, rgba(20, 184, 166, 0.22), transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, rgba(15, 61, 62, 0.14), transparent 50%),
-    linear-gradient(165deg, var(--bg-c), var(--bg-a) 42%, var(--bg-b));
+    radial-gradient(900px 420px at 0% 0%, rgba(13, 148, 136, 0.08), transparent 55%),
+    radial-gradient(700px 380px at 100% 0%, rgba(15, 61, 62, 0.06), transparent 50%),
+    var(--bg-page);
   background-attachment: fixed;
 }
 
@@ -37,7 +37,7 @@ textarea {
 }
 
 .page-shell {
-  width: min(1240px, calc(100% - 32px));
+  width: min(1360px, calc(100% - 28px));
   margin: 0 auto;
 }
 
