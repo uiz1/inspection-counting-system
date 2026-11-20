@@ -11,10 +11,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    ElButton: typeof import('element-plus/es')['ElButton']
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']
     FeatureMeters: typeof import('./src/components/FeatureMeters.vue')['default']
+    MapCanvas: typeof import('./src/components/map/MapCanvas.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TimingBars: typeof import('./src/components/TimingBars.vue')['default']
